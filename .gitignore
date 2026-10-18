@@ -1,0 +1,23 @@
+# Runtime configuration, browser profiles, captured frames and logs
+/data/
+/autostart-backup/
+*.log
+*.pid
+.env
+.env.*
+
+# Rebuild the session watcher from ShutdownWatcher.cs
+/ShutdownWatcher.exe
+/ShutdownWatcher.pdb
+
+# Dependencies, packaging and editor files
+node_modules/
+dist/
+build/
+*.zip
+.vs/
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
+*.tmp

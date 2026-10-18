@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>初音未来 · Live System</title>
+<style>
+:root{--miku:#39c5bb;--text:#effffb}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}
+body{background:#083c37;color:var(--text);font-family:"Microsoft YaHei UI","Microsoft YaHei","Segoe UI",sans-serif}
+.backdrop{position:absolute;inset:0;background:radial-gradient(ellipse at 27% 80%,#146e5d,transparent 65%),linear-gradient(110deg,#07342f,#216d58)}
+.art{position:absolute;right:-2.1vw;top:-12vh;width:45vw;height:auto;mask-image:linear-gradient(90deg,transparent,#000 23%);-webkit-mask-image:linear-gradient(90deg,transparent,#000 23%)}
+.shade{position:absolute;inset:0;background:linear-gradient(90deg,#052b2af5 0%,#052b2af2 45%,#052b2acc 57%,#052b2a40 67%,transparent 76%)}
+.grid{position:absolute;inset:0;background-image:linear-gradient(#7cffe906 1px,transparent 1px),linear-gradient(90deg,#7cffe906 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(90deg,#000,transparent 72%)}
+.edge{position:absolute;inset:3.2vh 1.2vw;border:1px solid #70e5cf55;border-radius:4vh;pointer-events:none}
+.topline{position:absolute;left:3.4vw;top:7vh;width:3.8vw;height:4px;border-radius:9px;background:var(--miku);box-shadow:0 0 20px #39c5bb88}
+.wrap{position:relative;width:69%;height:100%;padding:24vh 3.4vw 10vh;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.25vw;align-items:center}
+.heading{position:absolute;top:11vh;left:3.4vw}.device{font-size:3.2vh;color:#add9ca;margin-top:1.8vh;letter-spacing:.06em}
+.clock{position:absolute;top:8.5vh;right:34.4vw;display:flex;align-items:baseline;gap:.7vw;font-variant-numeric:tabular-nums;text-shadow:0 2px 12px #00362c}.clock #time{font-size:12vh;font-weight:750;line-height:1.2;letter-spacing:-.03em}.clock #seconds{font-size:5.5vh;font-weight:700;color:#81e2d3}
+.brand{font-size:3.4vh;font-weight:700;letter-spacing:.19em;color:#75e5d4;display:flex;align-items:center;gap:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:#a3ffe5;box-shadow:0 0 14px #39c5bb;animation:pulse 2s infinite}
+.card{height:60vh;border:1px solid #6bdbc075;border-radius:3vh;padding:5vh 1.35vw;background:linear-gradient(140deg,#1a675a70,#0a3a3540);position:relative;box-shadow:0 8px 26px #002a241a}
+.kicker{font-size:4.4vh;letter-spacing:.08em;font-weight:700;color:#b3f5e4;white-space:nowrap}
+.value{font-size:20vh;font-weight:750;line-height:1.35;font-variant-numeric:tabular-nums;white-space:nowrap;text-shadow:0 2px 12px #00362c}
+.unit{font-size:7vh;color:#76e2ce;margin-left:4px}
+.bar{height:1.25vh;border-radius:10px;background:#6cd8bb28;margin-top:2vh;overflow:hidden}.fill{height:100%;width:0;background:linear-gradient(90deg,#39c5bb,#b2f7c6);transition:width .8s}
+.meta{font-size:3.6vh;color:#adddce;margin-top:3.4vh;letter-spacing:.03em;white-space:nowrap;font-variant-numeric:tabular-nums}
+.credit{position:absolute;right:2.6vw;bottom:5vh;font-size:2.6vh;font-weight:600;color:#e9ffe7;text-shadow:0 1px 5px #12564c,0 1px 3px #12564c;letter-spacing:.06em}
+@keyframes pulse{50%{opacity:.45}}
+</style>
+<div class="backdrop"></div><img class="art" src="/assets/rurudo-miku-transform.webp" alt="初音未来，rurudo 绘，DECO*27 TRANSFORM 纪念插画"><div class="shade"></div><div class="grid"></div><div class="edge"></div><div class="topline"></div>
+<header class="heading"><div class="brand"><span class="dot"></span>MIKU · LIVE SYSTEM</div><div class="device" id="gpuName">显卡数据读取中</div></header>
+<div class="clock" aria-label="当前时间"><span id="time">--:--</span><span id="seconds">--</span></div>
+<main class="wrap"><section class="card"><div class="kicker">GPU 占用</div><div class="value"><span id="gpu">--</span><span class="unit">%</span></div><div class="bar"><div class="fill" id="gpuBar"></div></div><div class="meta">图形处理器负载</div></section><section class="card"><div class="kicker">内存占用</div><div class="value"><span id="memory">--</span><span class="unit">%</span></div><div class="bar"><div class="fill" id="memoryBar"></div></div><div class="meta" id="memoryDetail">-- / -- GiB</div></section><section class="card"><div class="kicker">显存占用</div><div class="value"><span id="vram">--</span><span class="unit">%</span></div><div class="bar"><div class="fill" id="vramBar"></div></div><div class="meta" id="vramDetail">-- / -- GiB</div></section></main>
+<div class="credit">Art by rurudo · © CFM</div>
+<script>
+function valid(n){return typeof n==='number'&&Number.isFinite(n)&&n>=0;}
+function clock(){const now=new Date();document.getElementById('time').textContent=now.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false});document.getElementById('seconds').textContent=String(now.getSeconds()).padStart(2,'0');}
+function percentage(name,value){document.getElementById(name).textContent=valid(value)?Math.round(value):'--';document.getElementById(name+'Bar').style.width=(valid(value)?Math.min(100,value):0)+'%';}
+function capacity(used,total){return valid(used)&&valid(total)&&total>0?(used/1073741824).toFixed(1)+' / '+(total/1073741824).toFixed(1)+' GiB':'-- / -- GiB';}
+async function update(){try{const response=await fetch('/api/stats',{cache:'no-store'});if(!response.ok)throw Error('Stats unavailable');const s=await response.json();for(const name of ['gpu','memory','vram'])percentage(name,s[name]);document.getElementById('gpuName').textContent=s.gpuName||'显卡数据暂不可用';document.getElementById('memoryDetail').textContent=capacity(s.memoryUsedBytes,s.memoryTotalBytes);document.getElementById('vramDetail').textContent=capacity(s.vramUsedBytes,s.vramTotalBytes);}catch{for(const name of ['gpu','memory','vram'])percentage(name,null);document.getElementById('gpuName').textContent='数据暂不可用';document.getElementById('memoryDetail').textContent=capacity(null,null);document.getElementById('vramDetail').textContent=capacity(null,null);}}
+clock();update();setInterval(clock,250);setInterval(update,1200);
+</script>
+</html>

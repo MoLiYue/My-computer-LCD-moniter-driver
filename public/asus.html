@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>初音未来 · CPU</title>
+<style>
+:root{--miku:#39c5bb;--white:#eafffb}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}
+body{background:#143d38;color:var(--white);font-family:"Microsoft YaHei UI","Microsoft YaHei","Segoe UI",sans-serif;font-weight:900}
+.halo{position:absolute;inset:0;background:radial-gradient(ellipse at 78% 25%,#39c5bbb8,transparent 72%),linear-gradient(135deg,#205d55,#123c36 70%)}
+.art{position:absolute;width:410px;height:320px;object-fit:cover;right:-110px;top:0;opacity:1}
+.shade{position:absolute;inset:0;background:linear-gradient(90deg,#092f2bf5 0%,#0b3832de 24%,#0b383295 41%,#0b383220 60%,transparent 73%),linear-gradient(0deg,#0a3f3438,transparent 24%)}
+.frame{position:absolute;inset:9px;border:1px solid #55e6dba8;border-radius:18px;box-shadow:inset 0 0 25px #39c5bb18;pointer-events:none}
+.accent{position:absolute;left:20px;top:24px;width:34px;height:4px;background:var(--miku);border-radius:5px;box-shadow:0 0 14px #39c5bb80}
+main{position:relative;width:100%;height:100%;padding:43px 20px 22px;display:flex;flex-direction:column;gap:29px}
+.metric{width:155px}.label{font-size:17px;line-height:1.3;letter-spacing:1px;color:var(--miku);text-shadow:0 2px 7px #000;font-weight:900}
+.value{height:76px;display:flex;align-items:baseline;gap:5px;white-space:nowrap;font-variant-numeric:tabular-nums;text-shadow:0 3px 9px #00100f,0 0 2px #fff4}
+.number{font-size:62px;line-height:1.2;letter-spacing:-2px;font-weight:900;-webkit-text-stroke:.35px currentColor}
+.unit{font-size:25px;letter-spacing:-1px;font-weight:900;color:var(--miku)}
+.bar{height:4px;width:115px;background:#39c5bb30;border-radius:8px;overflow:hidden;margin-top:1px}.fill{height:100%;background:var(--miku);width:0;transition:width .6s;box-shadow:0 0 8px #39c5bb}
+.heat .number{color:#fff}.heat .unit{font-size:24px}.heat.hot .number{color:#ffbca0}
+</style>
+<div class="halo"></div><img class="art" src="/assets/rurudo-miku-cutout.png" alt="初音未来 Holiday Memories -游戏-，rurudo 绘，© Crypton Future Media"><div class="shade"></div><div class="frame"></div><div class="accent"></div>
+<main><section class="metric"><div class="label">CPU 占用</div><div class="value"><span class="number" id="cpu">--</span><span class="unit">%</span></div><div class="bar"><div class="fill" id="cpuBar"></div></div></section><section class="metric heat" id="heat"><div class="label">CPU 温度</div><div class="value"><span class="number" id="temperature">--</span><span class="unit">°C</span></div><div class="bar"><div class="fill" id="temperatureBar"></div></div></section></main>
+<script>
+async function update(){try{const response=await fetch('/api/stats',{cache:'no-store'});if(!response.ok)throw Error('Sensor unavailable');const s=await response.json();document.getElementById('cpu').textContent=Math.round(s.cpu);document.getElementById('cpuBar').style.width=Math.min(100,Math.max(0,s.cpu))+'%';const valid=typeof s.cpuTemperature==='number'&&Number.isFinite(s.cpuTemperature);document.getElementById('temperature').textContent=valid?Math.round(s.cpuTemperature):'--';document.getElementById('temperatureBar').style.width=(valid?Math.min(100,s.cpuTemperature/95*100):0)+'%';document.getElementById('heat').classList.toggle('hot',valid&&s.cpuTemperature>=85);}catch{document.getElementById('cpu').textContent='--';document.getElementById('temperature').textContent='--';}}
+update();setInterval(update,1200);
+</script>
+</html>

@@ -1,0 +1,1 @@
+{"name":"miku-screen-hub","version":"1.2.0","private":true,"description":"Unified LCD control with automatic recovery and Windows session-end display blanking","scripts":{"start":"node app.js --start --open","test":"node test.js"},"engines":{"node":">=22"}}
