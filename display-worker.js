@@ -4,7 +4,7 @@ const {spawn}=require('node:child_process');
 const {Renderer,delay}=require('./renderer');
 const id=process.argv[2];if(!['aigo','asus'].includes(id))throw Error('Unknown display');
 const protocol=require('./protocols/'+id),hid=require('./vendor/hid.node');
-const state={id,connected:false,running:false,sent:0,bytes:0,actualFps:0,retries:0,reconnects:0,reconnecting:false,retryInMs:0,error:'',device:null,config:null,workerVersion:'1.2.0'};
+const state={id,connected:false,running:false,sent:0,bytes:0,actualFps:0,retries:0,reconnects:0,reconnecting:false,retryInMs:0,error:'',device:null,config:null,workerVersion:'1.2.1',sessionResets:0};
 let raw,initRaw,renderer,timer,inFlight,retryTimer,recoveryAttempts=0,wantRunning=false,generation=0,sequence=0,config,queue=Promise.resolve(),closing=false;
 const notify=message=>{if(process.connected)process.send(message,()=>{});};
 const publish=()=>notify({type:'state',state});
@@ -37,11 +37,19 @@ async function connect(){
     const initDevices=hid.devices(0x0b05,0x1ca9).filter(device=>device.interface===0&&device.usagePage===65286&&device.serialNumber===devices[0].serialNumber);
     if(initDevices.length!==1)throw Error('Expected matching ASUS LCD initialization interface');
     initRaw=new hid.HID(initDevices[0].path);raw=new hid.HID(devices[0].path);
-    if(initRaw.write([...protocol.initializationReport()])!==441)throw Error('Incomplete LCD initialization write');
-    await delay(1000);state.initialized=true;
     state.device={name:'华硕水冷屏',width:protocol.WIDTH,height:protocol.HEIGHT,serial:devices[0].serialNumber};
+    await initializeAsus();
   }
   state.connected=true;
+}
+async function initializeAsus(){
+  state.initialized=false;
+  if(initRaw.write([...protocol.initializationReport()])!==441)throw Error('Incomplete LCD initialization write');
+  await delay(1000);
+  // A successful HID write does not prove the LCD is accepting images. Use a
+  // small, known-compatible frame to establish and verify the upload session.
+  const bootstrap=fs.readFileSync(path.join(__dirname,'public','assets','black-asus.jpg'));
+  await upload(bootstrap,undefined,1);state.initialized=true;
 }
 function compatibleJpeg(input){return new Promise((resolve,reject)=>{
   const filter={90:'transpose=1',180:'hflip,vflip',270:'transpose=2'}[config.rotation];
@@ -60,8 +68,18 @@ async function upload(jpeg,token,attempts=3,ackTimeout=1500){
     try{
       for(let stale=0;stale<64;stale++){if(raw.readTimeout(0).length===0)break;}
       for(const report of reports){if(raw.write([...report])!==1025)throw Error('Incomplete HID write');}
-      protocol.validateAck(raw.readTimeout(ackTimeout));return;
-    }catch(error){if(attempt===attempts-1)throw error;state.retries++;await delay(100);}
+      const reply=raw.readTimeout(ackTimeout);
+      if(reply.length===0)throw Error('LCD frame acknowledgement timed out after '+ackTimeout+' ms');
+      protocol.validateAck(reply);return;
+    }catch(error){
+      if(attempt===attempts-1)throw error;
+      state.retries++;state.lastTransportError=error.message;state.lastTransportErrorAt=new Date().toISOString();
+      await delay(100);if(token!==undefined&&token!==generation)return;
+      // Repeating a large frame in an unverified session can fail indefinitely.
+      // Re-establish it before retrying; shutdown uses one attempt and skips this.
+      await initializeAsus();state.sessionResets++;
+      console.error(`[${state.lastTransportErrorAt}] ASUS upload session reset: ${error.message}`);
+    }
   }
 }
 async function tick(token){
@@ -74,7 +92,7 @@ async function tick(token){
     await upload(jpeg,token);
     if(token!==generation||!state.running)return;
     if(state.sent%300===0)fs.writeFileSync(path.join(__dirname,'data',id,'last-frame.jpg'),jpeg);
-    state.sent++;state.bytes+=jpeg.length;state.error='';state.powerState='on';recoveryAttempts=0;state.actualFps=Math.round(1000/Math.max(1000/config.fps,Date.now()-began)*10)/10;
+    state.sent++;state.bytes+=jpeg.length;state.error='';state.powerState='on';state.lastFrameAt=new Date().toISOString();recoveryAttempts=0;state.actualFps=Math.round(1000/Math.max(1000/config.fps,Date.now()-began)*10)/10;
     notify({type:'frame',jpeg,state});
   }catch(error){if(token===generation)await fail(error);}
   finally{if(state.running&&token===generation)timer=setTimeout(()=>runTick(token),Math.max(1,1000/config.fps-(Date.now()-began)));}
@@ -99,11 +117,6 @@ async function start(){
   cancelRecovery();if(inFlight)await inFlight;await closeRenderer();disconnect();state.error='';
   try{
     await connect();renderer=new Renderer(id,protocol.WIDTH,protocol.HEIGHT);await renderer.open(config.url);
-    // Replay the last acknowledged frame to resume a previously initialized ASUS LCD session.
-    if(id==='asus'){
-      const file=path.join(__dirname,'data',id,'last-frame.jpg');
-      if(fs.existsSync(file)){try{await upload(fs.readFileSync(file));}catch{}}
-    }
     state.running=true;const token=++generation;publish();runTick(token);
   }catch(error){await fail(error);throw error;}
 }

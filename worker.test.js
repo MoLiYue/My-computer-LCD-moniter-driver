@@ -1,8 +1,8 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 module.exports=async function(){
- const handles=[],browsers=[],captures=[],timers=[];
- class FakeHID{constructor(device){this.device=device;this.closed=0;handles.push(this);}write(data){assert.equal(data.length,this.device==='init'?441:1025);return data.length;}readTimeout(){return Buffer.from([8,129,...Array(14).fill(0)]);}close(){this.closed++;}}
+ const handles=[],browsers=[],captures=[],timers=[],writes=[];let ackFailures=0;
+ class FakeHID{constructor(device){this.device=device;this.closed=0;handles.push(this);}write(data){assert.equal(data.length,this.device==='init'?441:1025);writes.push({device:this.device,data:Buffer.from(data)});return data.length;}readTimeout(ms){if(ms===0)return Buffer.alloc(0);if(ackFailures>0){ackFailures--;return Buffer.alloc(0);}return Buffer.from([8,129,...Array(14).fill(0)]);}close(){this.closed++;}}
  class FakeRenderer{constructor(){this.closed=0;browsers.push(this);}async open(){}capture(){return new Promise((resolve,reject)=>{this.pending={resolve,reject};captures.push(this.pending);});}async close(){this.closed++;if(this.pending)this.pending.reject(Error('Renderer closed'));}}
  const protocol=require('./protocols/asus');
  const context={Buffer,console:{error(){}},process:{argv:['node','display-worker.js','asus'],connected:true,send(message,callback){if(callback)callback();},on(){},exit(){}},setTimeout(callback,ms){const timer={callback,ms,cancelled:false};timers.push(timer);return timer;},clearTimeout(timer){if(timer)timer.cancelled=true;},__dirname,__filename:path.join(__dirname,'display-worker.js'),require(name){
@@ -17,6 +17,10 @@ module.exports=async function(){
  vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(__dirname,'display-worker.js'),'utf8'),context);
  await vm.runInContext('action({action:"start",requestId:1,config:{url:"http://test/",fps:5,quality:80,rotation:180}})',context);
  assert.equal(handles.length,2);assert.ok(handles.every(handle=>handle.closed===0),'Initialization interface must remain open while displaying');
+ assert.equal(writes[0].device,'init');assert.equal(writes.filter(write=>write.device==='bulk').length,3,'Session must be verified with the three-packet black frame before capture');assert.equal(vm.runInContext('state.initialized',context),true);
+ const beforeReset=writes.length;ackFailures=1;
+ await vm.runInContext("upload(fs.readFileSync(require('node:path').join(__dirname,'public','assets','black-asus.jpg')),generation)",context);
+ const resetWrites=writes.slice(beforeReset);assert.equal(resetWrites.filter(write=>write.device==='init').length,1,'Lost frame ACK must reinitialize the session before replay');assert.equal(resetWrites.filter(write=>write.device==='bulk').length,9,'Send failed frame, verified bootstrap, then retry');assert.equal(vm.runInContext('state.sessionResets',context),1);assert.match(vm.runInContext('state.lastTransportError',context),/timed out/);
  const firstFrame=vm.runInContext('inFlight',context);captures[0].reject(Error('Renderer disconnected'));await firstFrame;
  assert.ok(handles.every(handle=>handle.closed===1),'Failure must close both HID interfaces');assert.equal(browsers[0].closed,1,'Failure must close the browser before retry');
  const retry=timers.find(timer=>timer.ms===1000&&!timer.cancelled);assert.ok(retry,'Failure must schedule recovery');retry.callback();await vm.runInContext('queue',context);
@@ -28,6 +32,7 @@ module.exports=async function(){
  await vm.runInContext('action({action:"start",requestId:3})',context);
  await vm.runInContext('action({action:"power-off",requestId:4})',context);
  assert.equal(vm.runInContext('state.powerState',context),'black');assert.equal(vm.runInContext('state.running',context),false);assert.ok(handles.every(handle=>handle.closed===1));
- console.log('Worker lifecycle passed: held init handle, failure cleanup, recovery, stop cancellation, black-frame power off.');
+ ackFailures=1;await assert.rejects(vm.runInContext('action({action:"start",requestId:5})',context),/timed out/);assert.equal(vm.runInContext('state.running',context),false);assert.equal(vm.runInContext('state.initialized',context),false);assert.ok(handles.every(handle=>handle.closed===1),'Failed bootstrap must close both handles');await vm.runInContext('action({action:"stop",requestId:6})',context);
+ console.log('Worker lifecycle passed: verified bootstrap, lost-ACK session reset, bootstrap failure cleanup, held init handle, recovery, stop cancellation, black-frame power off.');
 };
 if(require.main===module)module.exports().catch(error=>{console.error(error);process.exitCode=1;});
