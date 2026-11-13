@@ -1,36 +1,35 @@
 # Miku Screen Hub
 
-统一控制爱国者 1920×462 机箱长条屏和华硕 TX GAMING LC III 320×320 水冷屏，支持网页画面、硬件数据和初音主题。当前版本 1.3.0。
+统一控制爱国者 1920×462 机箱长条屏和华硕 TX GAMING LC III 320×320 水冷屏。当前版本 **2.0.0**，后台由 Go 实现，内置初音主题直接绘制，自定义网页才启用 WebView2。
 
 长条屏显示时间、GPU、内存与显存占用；水冷屏显示 CPU 占用和温度。两屏独立渲染、传输和重连。水冷屏连接时先确认小黑图应答，传输超时后先重建并验证会话，再重试画面。正常关机、重启或注销时，长条屏进入休眠，水冷屏显示全黑画面；尚未确认水冷屏关闭背光的硬件指令。
 
 ## 从源码运行
 
-需要 Windows x64、Node.js 22+、系统 [WebView2 Runtime](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)、FFmpeg，以及 .NET Framework 4.6.2 或更高版本。两屏共用 WebView2 浏览器进程组，各自保留网页配置；默认无需安装或启动桌面版 Chrome 或 Edge。CPU 温度使用本机已有 ASUS asComSvc / atkexCom.axdata 组件；程序不控制风扇或水泵。
+需要 Windows x64 和 Go 1.25+（仅构建时使用）。运行内置主题需要微软雅黑粗体、两个随仓库提供的 PowerShell 传感器脚本，以及读取 CPU 温度所需的 ASUS asComSvc / atkexCom.axdata。程序不控制风扇或水泵。
 
 在仓库目录执行：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build-webview.ps1
-node test.js
-node app.js --start --open
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build-go.ps1 -Test
+.\MikuScreenHub.exe --start --open
 ```
 
-构建脚本生成 `ShutdownWatcher.exe` 和 `data/webview-bin/` 下的渲染助手。WebView2 构建首次从 NuGet 下载固定版本的 SDK，程序运行时直接用系统 Runtime。启动后打开本机控制台 http://127.0.0.1:19330/ 。测试不会启动屏幕传输，也不会让 Windows 关机。首次运行会自动建立 `data/` 并使用内置默认配置。
+构建脚本生成 `MikuScreenHub.exe`，控制台和内置主题素材嵌入 EXE。运行后打开本机控制台 http://127.0.0.1:19330/ 。原有 `data/config.json` 可直接沿用。测试不向 USB 屏写入数据，也不会让 Windows 关机；可用 `MikuScreenHub.exe --probe-hid asus` 或 `--probe-hid aigo` 只读枚举设备。
 
-`vendor/hid.node` 是运行所需的 Windows x64 原生 HID 依赖，随对应许可证一并保存。项目使用 Node.js 内置模块，不需要运行 npm install。可用 `ASUS_FFMPEG` 指定 FFmpeg。排查 WebView2 兼容性时，可在启动前设置 `SCREEN_RENDERER=chrome` 使用备用无界面 Chrome/Edge，再用 `SCREEN_BROWSER` 指定浏览器路径。
+Go 版直接使用 Windows HID，JPEG 编码及水冷画面旋转在进程内完成，不依赖 Node.js、hid.node、FFmpeg 或单独的关机监听器。内置主题无需启动 Chromium。选择自定义网址时，先运行 `build-webview.ps1` 构建可选助手，并使用系统已安装的 [WebView2 Runtime](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)。仅使用内置主题时可跳过这一步。
+
+旧 Node 版源码及构建脚本保留作回退。先在控制台退出 Go 程序，再执行 `powershell -NoProfile -ExecutionPolicy Bypass -File .\autostart.ps1 -LegacyNode` 可临时运行旧版。现有「Miku Screen Hub」登录任务默认启动 Go EXE，无需重新注册。
 
 ## 源码结构
 
-- `app.js`、`config.js`：本机控制接口、配置和子进程管理。
-- `display-worker.js`、`protocols/`：设备协议、独立传输与故障恢复。
-- `webview-renderer.js`、`WebViewRenderer.cs`：无窗口 WebView2 渲染及截图。
-- `renderer.js`、`renderer-cleanup.ps1`：渲染后端选择与备用浏览器的残留进程清理。
+- `main.go`、`config_go.go`：本机控制台接口、配置与进程生命周期。
+- `display_go.go`、`protocol.go`、`hid_windows.go`：独立传输、Windows HID 与故障恢复。
+- `render.go`、`webview_go.go`、`WebViewRenderer.cs`：原生绘图和自定义网页截图。
 - `public/`：控制台、屏幕界面和素材。
-- `telemetry.js`、`*-reader.ps1`：CPU、内存、GPU、显存和温度采集。
-- `session-watcher.js`、`ShutdownWatcher.cs`：Windows 会话结束监听与熄屏。
-- `*.test.js`、`test.js`：控制接口、生命周期和会话通知验证。
+- `telemetry_windows.go`、`*-reader.ps1`：Windows CPU、内存接口及 GPU、显存、温度采集。
+- `session_windows.go`：进程内监听 Windows 会话结束。
+- `hub_test.go`：Go 版协议、控制接口、原生渲染及应答恢复测试。
 - `autostart.ps1`、`install-autostart.ps1`：当前电脑的登录自启配置；安装脚本针对用户 11274，其他电脑需修改。
 
 完整使用说明和实际测试范围见 [使用说明](使用说明.md) 与 [验证记录](验证记录.md)。图片来源见 [长条屏图片来源](长条屏图片来源.md) 和 [水冷屏图片来源](水冷屏图片来源.md)。素材版权归原作者，第三方许可证保留在 `vendor/`。

@@ -1,3 +1,4 @@
+param([switch]$LegacyNode)
 $ErrorActionPreference = 'Stop'
 $hubRoot = $PSScriptRoot
 $hubData = Join-Path $hubRoot 'data'
@@ -11,33 +12,30 @@ try {
     try { $hubOwnsMutex=$hubMutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $hubOwnsMutex=$true }
     if (-not $hubOwnsMutex) { Write-HubLog 'Another autostart instance is active.'; return }
     if (Get-HubStatus) { Write-HubLog 'Already running; no duplicate instance launched.'; return }
-    Write-HubLog 'Starting unified program; native LCD initialization is handled by the display worker.'
-    $hubNodePath = 'C:\Program Files\nodejs\node.exe'
-    $hubNode = Start-Process -FilePath $hubNodePath -ArgumentList 'app.js','--start' -WorkingDirectory $hubRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $hubData 'hub-stdout.log') -RedirectStandardError (Join-Path $hubData 'hub-stderr.log') -PassThru
-    $null=$hubNode.Handle
-    Write-HubLog ('Unified program started, PID '+$hubNode.Id+'.')
+    if ($LegacyNode) {
+        $hubExe = 'C:\Program Files\nodejs\node.exe'
+        $hubArgs = @('app.js','--start')
+    } else {
+        $hubExe = Join-Path $hubRoot 'MikuScreenHub.exe'
+        $hubArgs = @('--start')
+        if (-not (Test-Path -LiteralPath $hubExe -PathType Leaf)) { throw 'MikuScreenHub.exe not found; run build-go.ps1.' }
+    }
+    $hubProcess = Start-Process -FilePath $hubExe -ArgumentList $hubArgs -WorkingDirectory $hubRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $hubData 'hub-stdout.log') -RedirectStandardError (Join-Path $hubData 'hub-stderr.log') -PassThru
+    $null=$hubProcess.Handle
+    Write-HubLog ('Started '+[IO.Path]::GetFileName($hubExe)+' PID '+$hubProcess.Id+'.')
     $hubDeadline=(Get-Date).AddSeconds(120)
-    $hubNextRetry=Get-Date
     $hubReady=$false
     do {
         Start-Sleep -Seconds 2
-        $hubNode.Refresh(); if ($hubNode.HasExited) { throw 'Unified program exited during startup.' }
+        $hubProcess.Refresh(); if ($hubProcess.HasExited) { throw 'Unified program exited during startup.' }
         $hubState=Get-HubStatus
         if ($hubState) {
             if ($hubState.screens.aigo.running -and $hubState.screens.aigo.sent -gt 0 -and $hubState.screens.asus.running -and $hubState.screens.asus.sent -gt 0) { $hubReady=$true; break }
-            if ((Get-Date) -ge $hubNextRetry) {
-                foreach ($hubId in @('aigo','asus')) {
-                    if (-not $hubState.screens.$hubId.running) {
-                        try { Invoke-RestMethod -Uri ('http://127.0.0.1:19330/api/screens/'+$hubId+'/start') -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 35 | Out-Null } catch { Write-HubLog ($hubId+' retry: '+$_.Exception.Message) }
-                    }
-                }
-                $hubNextRetry=(Get-Date).AddSeconds(10)
-            }
         }
     } while ((Get-Date) -lt $hubDeadline)
     Write-HubLog $(if ($hubReady) { 'Both displays are sending frames.' } else { 'Startup wait expired; check the control panel for display errors.' })
-    $hubNode.WaitForExit()
-    if ($null -ne $hubNode.ExitCode -and $hubNode.ExitCode -ne 0) { throw ('Unified program exited with code '+$hubNode.ExitCode) }
+    $hubProcess.WaitForExit()
+    if ($null -ne $hubProcess.ExitCode -and $hubProcess.ExitCode -ne 0) { throw ('Unified program exited with code '+$hubProcess.ExitCode) }
     Write-HubLog 'Unified program exited normally.'
 } catch {
     Write-HubLog ('ERROR: '+$_.Exception.Message)
