@@ -5,9 +5,10 @@ module.exports=async function(){
  class FakeHID{constructor(device){this.device=device;this.closed=0;handles.push(this);}write(data){assert.equal(data.length,this.device==='init'?441:1025);writes.push({device:this.device,data:Buffer.from(data)});return data.length;}readTimeout(ms){if(ms===0)return Buffer.alloc(0);if(ackFailures>0){ackFailures--;return Buffer.alloc(0);}return Buffer.from([8,129,...Array(14).fill(0)]);}close(){this.closed++;}}
  class FakeRenderer{constructor(){this.closed=0;browsers.push(this);}async open(){}capture(){return new Promise((resolve,reject)=>{this.pending={resolve,reject};captures.push(this.pending);});}async close(){this.closed++;if(this.pending)this.pending.reject(Error('Renderer closed'));}}
  const protocol=require('./protocols/asus');
- const context={Buffer,console:{error(){}},process:{argv:['node','display-worker.js','asus'],connected:true,send(message,callback){if(callback)callback();},on(){},exit(){}},setTimeout(callback,ms){const timer={callback,ms,cancelled:false};timers.push(timer);return timer;},clearTimeout(timer){if(timer)timer.cancelled=true;},__dirname,__filename:path.join(__dirname,'display-worker.js'),require(name){
+ const context={Buffer,console:{error(){}},process:{argv:['node','display-worker.js','asus'],env:{},connected:true,send(message,callback){if(callback)callback();},on(){},exit(){}},setTimeout(callback,ms){const timer={callback,ms,cancelled:false};timers.push(timer);return timer;},clearTimeout(timer){if(timer)timer.cancelled=true;},__dirname,__filename:path.join(__dirname,'display-worker.js'),require(name){
   if(name==='node:fs')return {existsSync:()=>false,readFileSync:file=>fs.readFileSync(file)};
   if(name==='node:path')return path;
+  if(name==='./package.json')return require('./package.json');
   if(name==='node:child_process')return {spawn(){throw Error('No FFmpeg expected in lifecycle test');}};
   if(name==='./renderer')return {Renderer:FakeRenderer,delay:async()=>{}};
   if(name==='./vendor/hid.node')return {HID:FakeHID,devices:()=>[{path:'init',interface:0,usagePage:65286,serialNumber:'test'},{path:'bulk',interface:1,usagePage:65286,serialNumber:'test'}]};

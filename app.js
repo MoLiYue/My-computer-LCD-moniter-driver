@@ -35,7 +35,7 @@ class DisplayClient {
   }
 }
 function client(id){let value=clients.get(id);if(!value||value.exited){value=new DisplayClient(id);clients.set(id,value);}return value;}
-function status(){return {name:'Miku Screen Hub',version:'1.2.1',shutdownWatcher:sessionWatcher.state,screens:Object.fromEntries(IDS.map(id=>[id,clients.get(id)?.state||{...descriptors[id],id,running:false,connected:false,config:configs[id]}])),telemetry:telemetry.snapshot()};}
+function status(){return {name:'Miku Screen Hub',version:require('./package.json').version,shutdownWatcher:sessionWatcher.state,screens:Object.fromEntries(IDS.map(id=>[id,clients.get(id)?.state||{...descriptors[id],id,running:false,connected:false,config:configs[id]}])),telemetry:telemetry.snapshot()};}
 async function powerOffDisplays(reason){
   if(poweringOff)return poweringOff;
   poweringOff=(async()=>{

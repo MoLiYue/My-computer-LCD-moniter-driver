@@ -4,7 +4,7 @@ const {spawn}=require('node:child_process');
 const {Renderer,delay}=require('./renderer');
 const id=process.argv[2];if(!['aigo','asus'].includes(id))throw Error('Unknown display');
 const protocol=require('./protocols/'+id),hid=require('./vendor/hid.node');
-const state={id,connected:false,running:false,sent:0,bytes:0,actualFps:0,retries:0,reconnects:0,reconnecting:false,retryInMs:0,error:'',device:null,config:null,workerVersion:'1.2.1',sessionResets:0};
+const state={id,connected:false,running:false,sent:0,bytes:0,actualFps:0,retries:0,reconnects:0,reconnecting:false,retryInMs:0,error:'',device:null,config:null,workerVersion:require('./package.json').version,rendererBackend:process.env.SCREEN_RENDERER==='chrome'?'chrome':'webview2',sessionResets:0};
 let raw,initRaw,renderer,timer,inFlight,retryTimer,recoveryAttempts=0,wantRunning=false,generation=0,sequence=0,config,queue=Promise.resolve(),closing=false;
 const notify=message=>{if(process.connected)process.send(message,()=>{});};
 const publish=()=>notify({type:'state',state});
